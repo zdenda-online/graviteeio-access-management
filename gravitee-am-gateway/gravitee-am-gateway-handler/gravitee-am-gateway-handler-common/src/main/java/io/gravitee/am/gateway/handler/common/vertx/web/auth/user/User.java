@@ -15,23 +15,30 @@
  */
 package io.gravitee.am.gateway.handler.common.vertx.web.auth.user;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import io.vertx.core.AsyncResult;
+import io.vertx.core.Future;
 import io.vertx.core.Handler;
+import io.vertx.core.buffer.Buffer;
+import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonObject;
+import io.vertx.ext.auth.AbstractUser;
 import io.vertx.ext.auth.AuthProvider;
 
 /**
  * @author Titouan COMPIEGNE (titouan.compiegne at graviteesource.com)
  * @author GraviteeSource Team
  */
-public class User implements io.vertx.ext.auth.User {
+public class User extends AbstractUser {
 
     private JsonObject principal;
     private io.gravitee.am.model.User user;
 
+    public User() {}
+
     public User(io.gravitee.am.model.User user) {
-        this.user = user;
         this.principal = JsonObject.mapFrom(user);
+        this.user = user;
     }
 
     public io.gravitee.am.model.User getUser() {
@@ -39,13 +46,8 @@ public class User implements io.vertx.ext.auth.User {
     }
 
     @Override
-    public io.vertx.ext.auth.User isAuthorized(String authority, Handler<AsyncResult<Boolean>> resultHandler) {
-        return null;
-    }
-
-    @Override
-    public io.vertx.ext.auth.User clearCache() {
-        return null;
+    protected void doIsPermitted(String permission, Handler<AsyncResult<Boolean>> resultHandler) {
+        resultHandler.handle(Future.succeededFuture());
     }
 
     @Override
@@ -54,7 +56,21 @@ public class User implements io.vertx.ext.auth.User {
     }
 
     @Override
-    public void setAuthProvider(AuthProvider authProvider) {
+    public void setAuthProvider(AuthProvider authProvider) { }
 
+
+    @Override
+    public void writeToBuffer(Buffer buff) {
+        super.writeToBuffer(buff);
+        principal.writeToBuffer(buff);
+    }
+
+    @Override
+    public int readFromBuffer(int pos, Buffer buffer) {
+        pos = super.readFromBuffer(pos, buffer);
+        principal = new JsonObject();
+        pos = principal.readFromBuffer(pos, buffer);
+        user = Json.mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false).convertValue(principal, io.gravitee.am.model.User.class);
+        return pos;
     }
 }

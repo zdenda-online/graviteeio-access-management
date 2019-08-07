@@ -18,6 +18,7 @@ package io.gravitee.am.gateway.handler.oauth2.resources.endpoint.authorization;
 import io.gravitee.am.gateway.handler.oauth2.resources.request.AuthorizationRequestFactory;
 import io.gravitee.am.gateway.handler.oauth2.service.request.AuthorizationRequest;
 import io.gravitee.am.gateway.handler.oauth2.service.utils.OAuth2Constants;
+import io.vertx.core.json.JsonObject;
 import io.vertx.reactivex.ext.web.RoutingContext;
 
 /**
@@ -29,7 +30,11 @@ public abstract class AbstractAuthorizationEndpoint {
     protected final AuthorizationRequestFactory authorizationRequestFactory = new AuthorizationRequestFactory();
 
     protected AuthorizationRequest resolveInitialAuthorizeRequest(RoutingContext routingContext) {
-        AuthorizationRequest authorizationRequest = routingContext.session().get(OAuth2Constants.AUTHORIZATION_REQUEST);
+        AuthorizationRequest authorizationRequest = null;
+        if (routingContext.session().get(OAuth2Constants.AUTHORIZATION_REQUEST) != null) {
+            authorizationRequest = ((JsonObject) routingContext.session().get(OAuth2Constants.AUTHORIZATION_REQUEST)).mapTo(AuthorizationRequest.class);
+        }
+
         // we have the authorization request in session if we come from the approval user page
         if (authorizationRequest != null) {
             // remove OAuth2Constants.AUTHORIZATION_REQUEST session value
@@ -38,7 +43,7 @@ public abstract class AbstractAuthorizationEndpoint {
             return authorizationRequest;
         }
 
-        // the initial request failed for some reasons, we have the required request parameters to re-router the authorize request
+        // the initial request failed for some reasons, we have the required request parameters to re-create the authorize request
         return createAuthorizationRequest(routingContext);
     }
 

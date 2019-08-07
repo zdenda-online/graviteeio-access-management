@@ -15,18 +15,22 @@
  */
 package io.gravitee.am.gateway.handler.oauth2.resources.endpoint.authorization;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.PropertyAccessor;
 import io.gravitee.am.common.oidc.Parameters;
 import io.gravitee.am.gateway.handler.common.vertx.utils.UriBuilderRequest;
 import io.gravitee.am.gateway.handler.oauth2.exception.AccessDeniedException;
 import io.gravitee.am.gateway.handler.oauth2.exception.InteractionRequiredException;
 import io.gravitee.am.gateway.handler.oauth2.exception.ServerErrorException;
-import io.gravitee.am.gateway.handler.oidc.service.flow.Flow;
 import io.gravitee.am.gateway.handler.oauth2.service.request.AuthorizationRequest;
 import io.gravitee.am.gateway.handler.oauth2.service.utils.OAuth2Constants;
+import io.gravitee.am.gateway.handler.oidc.service.flow.Flow;
 import io.gravitee.am.model.Client;
 import io.gravitee.am.model.Domain;
 import io.gravitee.common.http.HttpHeaders;
 import io.vertx.core.Handler;
+import io.vertx.core.json.Json;
+import io.vertx.core.json.JsonObject;
 import io.vertx.reactivex.core.http.HttpServerResponse;
 import io.vertx.reactivex.ext.auth.User;
 import io.vertx.reactivex.ext.web.RoutingContext;
@@ -34,6 +38,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Arrays;
+import java.util.Map;
 
 /**
  * The authorization endpoint is used to interact with the resource owner and obtain an authorization grant.
@@ -92,8 +97,7 @@ public class AuthorizationEndpoint extends AbstractAuthorizationEndpoint impleme
                         if (prompt != null && Arrays.asList(prompt.split("\\s+")).contains("none")) {
                             context.fail(new InteractionRequiredException("Interaction required"));
                         } else {
-                            // TODO should we put this data inside repository to handle cluster environment ?
-                            context.session().put(OAuth2Constants.AUTHORIZATION_REQUEST, request);
+                            context.session().put(OAuth2Constants.AUTHORIZATION_REQUEST, convert(request));
                             String approvalPage = UriBuilderRequest.resolveProxyRequest(context.request(),"/" + domain.getPath() + "/oauth/confirm_access", null);
                             doRedirect(context.response(), approvalPage);
                         }
@@ -106,5 +110,9 @@ public class AuthorizationEndpoint extends AbstractAuthorizationEndpoint impleme
 
     private void doRedirect(HttpServerResponse response, String url) {
         response.putHeader(HttpHeaders.LOCATION, url).setStatusCode(302).end();
+    }
+
+    private JsonObject convert(AuthorizationRequest authorizationRequest) {
+        return new JsonObject(Json.mapper.setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY).convertValue(authorizationRequest, Map.class));
     }
 }

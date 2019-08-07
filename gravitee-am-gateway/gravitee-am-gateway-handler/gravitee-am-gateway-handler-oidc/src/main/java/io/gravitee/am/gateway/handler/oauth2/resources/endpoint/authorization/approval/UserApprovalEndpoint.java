@@ -17,7 +17,6 @@ package io.gravitee.am.gateway.handler.oauth2.resources.endpoint.authorization.a
 
 import io.gravitee.am.gateway.handler.oauth2.service.request.AuthorizationRequest;
 import io.gravitee.am.gateway.handler.oauth2.service.scope.ScopeService;
-import io.gravitee.am.gateway.handler.oauth2.service.utils.OAuth2Constants;
 import io.gravitee.am.model.Client;
 import io.gravitee.am.model.oauth2.Scope;
 import io.gravitee.common.http.HttpHeaders;
@@ -36,6 +35,7 @@ import java.util.Set;
 public class UserApprovalEndpoint implements Handler<RoutingContext>  {
 
     private static final String CLIENT_CONTEXT_KEY = "client";
+    private static final String AUTHORIZATION_REQUEST_CONTEXT_KEY = "authorizationRequest";
     private ThymeleafTemplateEngine engine;
     private ScopeService scopeService;
 
@@ -49,7 +49,7 @@ public class UserApprovalEndpoint implements Handler<RoutingContext>  {
         // retrieve client
         Client client = routingContext.get(CLIENT_CONTEXT_KEY);
         // retrieve authorization request
-        AuthorizationRequest authorizationRequest = routingContext.session().get(OAuth2Constants.AUTHORIZATION_REQUEST);
+        AuthorizationRequest authorizationRequest = routingContext.get(AUTHORIZATION_REQUEST_CONTEXT_KEY);
 
         // fetch scope information (name + description) from the authorization request
         scopeService.getAll()

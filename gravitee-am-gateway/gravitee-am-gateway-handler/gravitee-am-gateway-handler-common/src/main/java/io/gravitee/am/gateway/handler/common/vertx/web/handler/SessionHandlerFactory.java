@@ -15,9 +15,11 @@
  */
 package io.gravitee.am.gateway.handler.common.vertx.web.handler;
 
+import io.gravitee.am.gateway.handler.common.vertx.sstore.RepositorySessionStore;
 import io.gravitee.am.gateway.handler.common.vertx.web.auth.provider.UserAuthProvider;
 import io.gravitee.am.gateway.handler.common.vertx.web.handler.impl.SessionHandlerImpl;
 import io.gravitee.am.model.Domain;
+import io.gravitee.am.repository.management.api.SessionRepository;
 import io.vertx.ext.web.sstore.SessionStore;
 import io.vertx.reactivex.core.Vertx;
 import io.vertx.reactivex.ext.web.handler.SessionHandler;
@@ -49,9 +51,12 @@ public class SessionHandlerFactory implements FactoryBean<SessionHandler> {
     @Autowired
     private Domain domain;
 
+    @Autowired
+    private SessionRepository sessionRepository;
+
     @Override
     public io.vertx.reactivex.ext.web.handler.SessionHandler getObject() {
-        SessionStore sessionStore = LocalSessionStore.create(vertx).getDelegate();
+        SessionStore sessionStore = RepositorySessionStore.create(vertx, sessionRepository);
         return io.vertx.reactivex.ext.web.handler.SessionHandler.newInstance(new SessionHandlerImpl(DEFAULT_SESSION_COOKIE_NAME, DEFAULT_SESSION_COOKIE_PATH, DEFAULT_SESSION_TIMEOUT, DEFAULT_NAG_HTTPS, DEFAULT_COOKIE_SECURE_FLAG, DEFAULT_COOKIE_HTTP_ONLY_FLAG, DEFAULT_SESSIONID_MIN_LENGTH, sessionStore)
                 .setCookieHttpOnlyFlag(true)
                 .setSessionCookieName(environment.getProperty("http.cookie.session.name", String.class, DEFAULT_SESSION_COOKIE_NAME))

@@ -25,6 +25,7 @@ import io.gravitee.am.model.Client;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
+import io.vertx.core.json.JsonObject;
 import io.vertx.reactivex.ext.auth.User;
 import io.vertx.reactivex.ext.web.RoutingContext;
 
@@ -47,7 +48,8 @@ public class UserApprovalRequestParseHandler implements Handler<RoutingContext> 
     @Override
     public void handle(RoutingContext routingContext) {
         // user must redirected here after an authorization request
-        AuthorizationRequest authorizationRequest = routingContext.session().get(OAuth2Constants.AUTHORIZATION_REQUEST);
+        AuthorizationRequest authorizationRequest = routingContext.session().get(OAuth2Constants.AUTHORIZATION_REQUEST) != null ?
+                ((JsonObject) routingContext.session().get(OAuth2Constants.AUTHORIZATION_REQUEST)).mapTo(AuthorizationRequest.class) : null;
         if (authorizationRequest == null) {
             routingContext.response().setStatusCode(400).end("An authorization request is required to handle user approval");
             return;

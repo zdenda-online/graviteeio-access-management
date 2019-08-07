@@ -54,6 +54,7 @@ public class UserApprovalSubmissionEndpoint implements Handler<RoutingContext> {
 
     private static final Logger logger = LoggerFactory.getLogger(UserApprovalSubmissionEndpoint.class);
     private static final String CLIENT_CONTEXT_KEY = "client";
+    private static final String AUTHORIZATION_REQUEST_CONTEXT_KEY = "authorizationRequest";
     private ApprovalService approvalService;
     private Domain domain;
 
@@ -72,7 +73,7 @@ public class UserApprovalSubmissionEndpoint implements Handler<RoutingContext> {
         io.gravitee.am.model.User endUser = ((io.gravitee.am.gateway.handler.common.vertx.web.auth.user.User) authenticatedUser.getDelegate()).getUser();
 
         // retrieve authorization request
-        AuthorizationRequest authorizationRequest = context.session().get(OAuth2Constants.AUTHORIZATION_REQUEST);
+        AuthorizationRequest authorizationRequest = context.get(AUTHORIZATION_REQUEST_CONTEXT_KEY);
 
         HttpServerRequest req = context.request();
         if (!req.isExpectMultipart()) {
