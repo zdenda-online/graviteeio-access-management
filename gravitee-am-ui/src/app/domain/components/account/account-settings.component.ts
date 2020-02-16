@@ -115,6 +115,15 @@ export class AccountSettingsComponent implements OnInit, OnChanges {
     return this.accountSettings && this.accountSettings.autoLoginAfterResetPassword;
   }
 
+  enableSendRecoverAccountEmail(event) {
+    this.accountSettings.sendRecoverAccountEmail = event.checked;
+    this.formChanged = true;
+  }
+
+  isSendRecoverAccountEmailEnabled() {
+    return this.accountSettings && this.accountSettings.sendRecoverAccountEmail;
+  }
+
   formIsValid() {
     if (this.accountSettings.loginAttemptsDetectionEnabled) {
       if (this.accountSettings.maxLoginAttempts < 1) {

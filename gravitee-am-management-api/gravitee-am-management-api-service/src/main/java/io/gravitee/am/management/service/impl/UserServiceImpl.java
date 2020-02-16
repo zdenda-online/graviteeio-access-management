@@ -16,22 +16,14 @@
 package io.gravitee.am.management.service.impl;
 
 import io.gravitee.am.common.audit.EventType;
-import io.gravitee.am.common.email.Email;
-import io.gravitee.am.common.email.EmailBuilder;
-import io.gravitee.am.common.jwt.Claims;
 import io.gravitee.am.common.oidc.StandardClaims;
 import io.gravitee.am.identityprovider.api.DefaultUser;
-import io.gravitee.am.management.service.EmailManager;
 import io.gravitee.am.management.service.EmailService;
 import io.gravitee.am.management.service.IdentityProviderManager;
 import io.gravitee.am.management.service.UserService;
-import io.gravitee.am.model.Application;
-import io.gravitee.am.model.Role;
-import io.gravitee.am.model.Template;
-import io.gravitee.am.model.User;
+import io.gravitee.am.model.*;
 import io.gravitee.am.model.common.Page;
 import io.gravitee.am.model.factor.EnrolledFactor;
-import io.gravitee.am.model.ReferenceType;
 import io.gravitee.am.repository.management.api.search.LoginAttemptCriteria;
 import io.gravitee.am.service.ApplicationService;
 import io.gravitee.am.service.AuditService;
@@ -42,12 +34,10 @@ import io.gravitee.am.service.model.NewUser;
 import io.gravitee.am.service.model.UpdateUser;
 import io.gravitee.am.service.reporter.builder.AuditBuilder;
 import io.gravitee.am.service.reporter.builder.management.UserAuditBuilder;
-import io.jsonwebtoken.JwtBuilder;
 import io.reactivex.Completable;
 import io.reactivex.Maybe;
 import io.reactivex.Single;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.Date;
@@ -65,15 +55,6 @@ public class UserServiceImpl implements UserService {
 
     private static final String DEFAULT_IDP_PREFIX = "default-idp-";
 
-    @Value("${user.registration.email.subject:New user registration}")
-    private String registrationSubject;
-
-    @Value("${user.registration.token.expire-after:86400}")
-    private Integer expireAfter;
-
-    @Value("${gateway.url:http://localhost:8092}")
-    private String gatewayUrl;
-
     @Autowired
     private io.gravitee.am.service.UserService userService;
 
@@ -82,12 +63,6 @@ public class UserServiceImpl implements UserService {
 
     @Autowired
     private EmailService emailService;
-
-    @Autowired
-    private JwtBuilder jwtBuilder;
-
-    @Autowired
-    private EmailManager emailManager;
 
     @Autowired
     private AuditService auditService;
@@ -207,7 +182,7 @@ public class UserServiceImpl implements UserService {
                     auditService.report(AuditBuilder.builder(UserAuditBuilder.class).principal(principal).type(EventType.USER_CREATED).user(user));
                     // in pre registration mode an email will be sent to the user to complete his account
                     if (newUser.isPreRegistration()) {
-                        new Thread(() -> completeUserRegistration(user)).start();
+                        new Thread(() -> emailService.send(Template.REGISTRATION_CONFIRMATION, user)).start();
                     }
                 })
                 .doOnError(throwable -> auditService.report(AuditBuilder.builder(UserAuditBuilder.class).principal(principal).type(EventType.USER_CREATED).throwable(throwable)));
@@ -367,7 +342,7 @@ public class UserServiceImpl implements UserService {
                     }
                     return user;
                 })
-                .doOnSuccess(user -> new Thread(() -> completeUserRegistration(user)).start())
+                .doOnSuccess(user -> new Thread(() -> emailService.send(Template.REGISTRATION_CONFIRMATION, user)).start())
                 .doOnSuccess(user1 -> auditService.report(AuditBuilder.builder(UserAuditBuilder.class).principal(principal).type(EventType.REGISTRATION_CONFIRMATION_REQUESTED).user(user1)))
                 .doOnError(throwable -> auditService.report(AuditBuilder.builder(UserAuditBuilder.class).principal(principal).type(EventType.REGISTRATION_CONFIRMATION_REQUESTED).throwable(throwable)))
                 .toCompletable();
@@ -460,64 +435,6 @@ public class UserServiceImpl implements UserService {
                     }
                     return roles1;
                 }).toCompletable();
-    }
-
-    private void completeUserRegistration(User user) {
-        final String templateName = getTemplateName(user);
-        io.gravitee.am.model.Email email = emailManager.getEmail(templateName, registrationSubject, expireAfter);
-        Email email1 = convert(user, email, "/confirmRegistration", "registrationUrl");
-        emailService.send(email1, user);
-    }
-
-    private Email convert(User user, io.gravitee.am.model.Email email, String redirectUri, String redirectUriName) {
-        Map<String, Object> params = prepareEmail(user, email.getExpiresAfter(), redirectUri, redirectUriName);
-        Email email1 = new EmailBuilder()
-                .to(user.getEmail())
-                .from(email.getFrom())
-                .fromName(email.getFromName())
-                .subject(email.getSubject())
-                .template(email.getTemplate())
-                .params(params)
-                .build();
-        return email1;
-    }
-
-    private Map<String, Object> prepareEmail(User user, int expiresAfter, String redirectUri, String redirectUriName) {
-        // generate a JWT to store user's information and for security purpose
-        final Map<String, Object> claims = new HashMap<>();
-        claims.put(Claims.iat, new Date().getTime() / 1000);
-        claims.put(Claims.exp, new Date(System.currentTimeMillis() + (expiresAfter * 1000)).getTime() / 1000);
-        claims.put(Claims.sub, user.getId());
-        if (user.getClient() != null) {
-            claims.put(Claims.aud, user.getClient());
-        }
-        claims.put(StandardClaims.EMAIL, user.getEmail());
-        claims.put(StandardClaims.GIVEN_NAME, user.getFirstName());
-        claims.put(StandardClaims.FAMILY_NAME, user.getLastName());
-
-        final String token = jwtBuilder.setClaims(claims).compact();
-
-        String entryPoint = gatewayUrl;
-        if (entryPoint != null && entryPoint.endsWith("/")) {
-            entryPoint = entryPoint.substring(0, entryPoint.length() - 1);
-        }
-
-        String redirectUrl = entryPoint + "/" + user.getReferenceId() + redirectUri + "?token=" + token;
-
-        Map<String, Object> params = new HashMap<>();
-        params.put("user", user);
-        params.put(redirectUriName, redirectUrl);
-        params.put("token", token);
-        params.put("expireAfterSeconds", expiresAfter);
-
-        return params;
-    }
-
-    private String getTemplateName(User user) {
-        return Template.REGISTRATION_CONFIRMATION.template()
-                + EmailManager.TEMPLATE_NAME_SEPARATOR
-                + user.getReferenceType() + user.getReferenceId()
-                + ((user.getClient() != null) ? EmailManager.TEMPLATE_NAME_SEPARATOR + user.getClient() : "");
     }
 
     private io.gravitee.am.identityprovider.api.User convert(NewUser newUser) {

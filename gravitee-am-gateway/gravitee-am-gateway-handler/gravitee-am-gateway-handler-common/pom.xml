@@ -183,6 +183,13 @@
             <version>${com.fasterxml.jackson.version}</version>
         </dependency>
 
+        <!-- Freemarker -->
+        <dependency>
+            <groupId>org.freemarker</groupId>
+            <artifactId>freemarker</artifactId>
+            <version>${freemarker.version}</version>
+        </dependency>
+
         <!-- Testing -->
         <dependency>
             <groupId>io.vertx</groupId>

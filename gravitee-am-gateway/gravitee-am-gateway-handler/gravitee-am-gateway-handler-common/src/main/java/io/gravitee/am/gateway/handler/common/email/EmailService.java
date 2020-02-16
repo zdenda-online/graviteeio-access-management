@@ -13,18 +13,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.gravitee.am.gateway.handler.email;
+package io.gravitee.am.gateway.handler.common.email;
 
-import io.gravitee.am.model.Email;
-import io.gravitee.common.service.Service;
+import io.gravitee.am.model.Template;
+import io.gravitee.am.model.User;
+import io.gravitee.am.model.oidc.Client;
 
 /**
  * @author Titouan COMPIEGNE (titouan.compiegne at graviteesource.com)
  * @author GraviteeSource Team
  */
-public interface EmailManager extends Service {
+public interface EmailService {
 
-    String TEMPLATE_NAME_SEPARATOR = "|";
-
-    Email getEmail(String template, String defaultSubject, int defaultExpiresAfter);
+    void send(Template template, User user, Client client);
 }

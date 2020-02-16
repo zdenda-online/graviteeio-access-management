@@ -28,6 +28,7 @@ public class AccountSettingsMongo {
     private Integer maxLoginAttempts;
     private Integer loginAttemptsResetTime;
     private Integer accountBlockedDuration;
+    private boolean sendRecoverAccountEmail;
     private boolean completeRegistrationWhenResetPassword;
     private boolean autoLoginAfterRegistration;
     private String redirectUriAfterRegistration;
@@ -72,6 +73,14 @@ public class AccountSettingsMongo {
 
     public void setAccountBlockedDuration(Integer accountBlockedDuration) {
         this.accountBlockedDuration = accountBlockedDuration;
+    }
+
+    public boolean isSendRecoverAccountEmail() {
+        return sendRecoverAccountEmail;
+    }
+
+    public void setSendRecoverAccountEmail(boolean sendRecoverAccountEmail) {
+        this.sendRecoverAccountEmail = sendRecoverAccountEmail;
     }
 
     public boolean isCompleteRegistrationWhenResetPassword() {

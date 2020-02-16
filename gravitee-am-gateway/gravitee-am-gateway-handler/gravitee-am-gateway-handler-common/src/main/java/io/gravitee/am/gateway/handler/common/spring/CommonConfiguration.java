@@ -15,6 +15,10 @@
  */
 package io.gravitee.am.gateway.handler.common.spring;
 
+import io.gravitee.am.gateway.certificate.jwt.JWTBuilder;
+import io.gravitee.am.gateway.certificate.jwt.JWTParser;
+import io.gravitee.am.gateway.certificate.jwt.impl.JJWTBuilder;
+import io.gravitee.am.gateway.certificate.jwt.impl.JJWTParser;
 import io.gravitee.am.gateway.handler.common.audit.AuditReporterManager;
 import io.gravitee.am.gateway.handler.common.audit.impl.AuditReporterManagerImpl;
 import io.gravitee.am.gateway.handler.common.auth.idp.IdentityProviderManager;
@@ -28,6 +32,10 @@ import io.gravitee.am.gateway.handler.common.certificate.CertificateManager;
 import io.gravitee.am.gateway.handler.common.certificate.impl.CertificateManagerImpl;
 import io.gravitee.am.gateway.handler.common.client.ClientSyncService;
 import io.gravitee.am.gateway.handler.common.client.impl.ClientSyncServiceImpl;
+import io.gravitee.am.gateway.handler.common.email.EmailManager;
+import io.gravitee.am.gateway.handler.common.email.EmailService;
+import io.gravitee.am.gateway.handler.common.email.impl.EmailManagerImpl;
+import io.gravitee.am.gateway.handler.common.email.impl.EmailServiceImpl;
 import io.gravitee.am.gateway.handler.common.jwt.JWTService;
 import io.gravitee.am.gateway.handler.common.jwt.impl.JWTServiceImpl;
 import io.gravitee.am.gateway.handler.common.oauth2.IntrospectionTokenService;
@@ -49,22 +57,37 @@ import io.gravitee.am.gateway.handler.context.ExecutionContextFactory;
 import io.gravitee.am.gateway.handler.context.TemplateVariableProviderFactory;
 import io.gravitee.am.gateway.handler.context.spring.ContextConfiguration;
 import io.gravitee.am.gateway.policy.spring.PolicyConfiguration;
+import io.jsonwebtoken.JwsHeader;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
 import io.vertx.ext.web.client.WebClientOptions;
 import io.vertx.reactivex.core.Vertx;
 import io.vertx.reactivex.ext.web.client.WebClient;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.env.Environment;
+
+import java.security.Key;
 
 /**
  * @author Titouan COMPIEGNE (titouan.compiegne at graviteesource.com)
  * @author GraviteeSource Team
  */
 @Configuration
-@Import({WebConfiguration.class, PolicyConfiguration.class, ContextConfiguration.class})
+@Import({WebConfiguration.class, FreemarkerConfiguration.class, PolicyConfiguration.class, ContextConfiguration.class})
 public class CommonConfiguration {
+
+    @Value("${jwt.kid:default-gravitee-AM-key}")
+    private String kid;
+
+    @Value("${jwt.secret:s3cR3t4grAv1t3310AMS1g1ingDftK3y}")
+    private String signingKeySecret;
+
+    @Value("${jwt.issuer:https://gravitee.am}")
+    private String issuer;
 
     @Autowired
     private Environment environment;
@@ -162,4 +185,34 @@ public class CommonConfiguration {
         UserStore userStore = new InMemoryUserStore(vertx, environment.getProperty("http.cookie.session.timeout", Long.class, io.vertx.reactivex.ext.web.handler.SessionHandler.DEFAULT_SESSION_TIMEOUT));
         return new UserManagerImpl(userStore);
     }
+
+    @Bean
+    public EmailService emailService() {
+        return new EmailServiceImpl();
+    }
+
+    @Bean
+    public EmailManager emailManager() {
+        return new EmailManagerImpl();
+    }
+
+    @Bean
+    public JWTParser jwtParser() {
+        JWTParser jwtParser = new JJWTParser(Jwts.parser().setSigningKey(key()));
+        return jwtParser;
+    }
+
+    @Bean
+    public JWTBuilder jwtBuilder() {
+        JWTBuilder jwtBuilder = new JJWTBuilder(Jwts.builder().signWith(key()).setHeaderParam(JwsHeader.KEY_ID, kid).setIssuer(issuer));
+        return jwtBuilder;
+    }
+
+    @Bean
+    public Key key() {
+        // HMAC key to sign/verify JWT used for email purpose
+        Key key = Keys.hmacShaKeyFor(signingKeySecret.getBytes());
+        return key;
+    }
+
 }
