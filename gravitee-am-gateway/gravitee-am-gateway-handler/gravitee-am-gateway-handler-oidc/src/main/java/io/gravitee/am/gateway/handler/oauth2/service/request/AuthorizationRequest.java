@@ -72,6 +72,8 @@ public class AuthorizationRequest extends OAuth2Request {
      */
     private List<ScopeApproval> consents;
 
+    private String responseMode;
+
     public String getState() {
         return state;
     }
@@ -126,6 +128,14 @@ public class AuthorizationRequest extends OAuth2Request {
 
     public void setConsents(List<ScopeApproval> consents) {
         this.consents = consents;
+    }
+
+    public String getResponseMode() {
+        return responseMode;
+    }
+
+    public void setResponseMode(String responseMode) {
+        this.responseMode = responseMode;
     }
 
     public OAuth2Request createOAuth2Request() {

@@ -74,6 +74,9 @@ public class ApplicationOAuthSettingsMongo {
     private int refreshTokenValiditySeconds;
     private int idTokenValiditySeconds;
     private List<TokenClaimMongo> tokenCustomClaims;
+    private String authorizationSignedResponseAlg;
+    private String authorizationEncryptedResponseAlg;
+    private String authorizationEncryptedResponseEnc;
 
     public String getClientId() {
         return clientId;
@@ -449,5 +452,29 @@ public class ApplicationOAuthSettingsMongo {
 
     public void setTokenCustomClaims(List<TokenClaimMongo> tokenCustomClaims) {
         this.tokenCustomClaims = tokenCustomClaims;
+    }
+
+    public String getAuthorizationSignedResponseAlg() {
+        return authorizationSignedResponseAlg;
+    }
+
+    public void setAuthorizationSignedResponseAlg(String authorizationSignedResponseAlg) {
+        this.authorizationSignedResponseAlg = authorizationSignedResponseAlg;
+    }
+
+    public String getAuthorizationEncryptedResponseAlg() {
+        return authorizationEncryptedResponseAlg;
+    }
+
+    public void setAuthorizationEncryptedResponseAlg(String authorizationEncryptedResponseAlg) {
+        this.authorizationEncryptedResponseAlg = authorizationEncryptedResponseAlg;
+    }
+
+    public String getAuthorizationEncryptedResponseEnc() {
+        return authorizationEncryptedResponseEnc;
+    }
+
+    public void setAuthorizationEncryptedResponseEnc(String authorizationEncryptedResponseEnc) {
+        this.authorizationEncryptedResponseEnc = authorizationEncryptedResponseEnc;
     }
 }

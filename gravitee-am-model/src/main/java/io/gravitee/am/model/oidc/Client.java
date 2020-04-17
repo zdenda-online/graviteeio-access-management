@@ -33,14 +33,13 @@ import java.util.*;
  *
  * See https://openid.net/specs/openid-connect-registration-1_0.html#ClientMetadata
  */
-
 public class Client implements Cloneable, Resource {
 
     public final static int DEFAULT_ACCESS_TOKEN_VALIDITY_SECONDS = 7200;
     public final static int DEFAULT_REFRESH_TOKEN_VALIDITY_SECONDS = 14400;
     public final static int DEFAULT_ID_TOKEN_VALIDITY_SECONDS = 14400;
-    public final static List<String> DEFAULT_GRANT_TYPES =  Arrays.asList(GrantType.AUTHORIZATION_CODE);
-    public final static List<String> DEFAULT_RESPONSE_TYPES = Arrays.asList(ResponseType.CODE);
+    public final static List<String> DEFAULT_GRANT_TYPES = Collections.singletonList(GrantType.AUTHORIZATION_CODE);
+    public final static List<String> DEFAULT_RESPONSE_TYPES = Collections.singletonList(ResponseType.CODE);
 
     private String id;
 
@@ -132,6 +131,12 @@ public class Client implements Cloneable, Resource {
     private int refreshTokenValiditySeconds = DEFAULT_REFRESH_TOKEN_VALIDITY_SECONDS;
 
     private int idTokenValiditySeconds = DEFAULT_ID_TOKEN_VALIDITY_SECONDS;
+
+    private String authorizationSignedResponseAlg;
+
+    private String authorizationEncryptedResponseAlg;
+
+    private String authorizationEncryptedResponseEnc;
 
     /**
      * Security domain associated to the client
@@ -232,6 +237,9 @@ public class Client implements Cloneable, Resource {
         this.tokenCustomClaims = other.tokenCustomClaims != null ? new ArrayList<>(other.tokenCustomClaims) : null;
         this.template = other.template;
         this.metadata = other.metadata != null ? new HashMap<>(other.metadata) : null;
+        this.authorizationSignedResponseAlg = other.authorizationSignedResponseAlg;
+        this.authorizationEncryptedResponseAlg = other.authorizationEncryptedResponseAlg;
+        this.authorizationEncryptedResponseEnc = other.authorizationEncryptedResponseEnc;
     }
 
     public String getId() {
@@ -699,6 +707,30 @@ public class Client implements Cloneable, Resource {
 
     public void setMetadata(Map<String, Object> metadata) {
         this.metadata = metadata;
+    }
+
+    public String getAuthorizationSignedResponseAlg() {
+        return authorizationSignedResponseAlg;
+    }
+
+    public void setAuthorizationSignedResponseAlg(String authorizationSignedResponseAlg) {
+        this.authorizationSignedResponseAlg = authorizationSignedResponseAlg;
+    }
+
+    public String getAuthorizationEncryptedResponseAlg() {
+        return authorizationEncryptedResponseAlg;
+    }
+
+    public void setAuthorizationEncryptedResponseAlg(String authorizationEncryptedResponseAlg) {
+        this.authorizationEncryptedResponseAlg = authorizationEncryptedResponseAlg;
+    }
+
+    public String getAuthorizationEncryptedResponseEnc() {
+        return authorizationEncryptedResponseEnc;
+    }
+
+    public void setAuthorizationEncryptedResponseEnc(String authorizationEncryptedResponseEnc) {
+        this.authorizationEncryptedResponseEnc = authorizationEncryptedResponseEnc;
     }
 
     @Override

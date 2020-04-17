@@ -16,9 +16,12 @@
 package io.gravitee.am.gateway.handler.oauth2.resources.endpoint;
 
 
+import io.gravitee.am.common.jwt.JWT;
 import io.gravitee.am.common.oauth2.GrantType;
 import io.gravitee.am.common.oauth2.ResponseType;
+import io.gravitee.am.common.oidc.ResponseMode;
 import io.gravitee.am.gateway.handler.common.client.ClientSyncService;
+import io.gravitee.am.gateway.handler.common.jwt.JWTService;
 import io.gravitee.am.gateway.handler.common.vertx.RxWebTestBase;
 import io.gravitee.am.gateway.handler.oauth2.exception.AccessDeniedException;
 import io.gravitee.am.gateway.handler.oauth2.exception.InvalidScopeException;
@@ -34,6 +37,7 @@ import io.gravitee.am.gateway.handler.oauth2.service.token.impl.AccessToken;
 import io.gravitee.am.gateway.handler.oidc.service.discovery.OpenIDDiscoveryService;
 import io.gravitee.am.gateway.handler.oidc.service.discovery.OpenIDProviderMetadata;
 import io.gravitee.am.gateway.handler.oidc.service.flow.Flow;
+import io.gravitee.am.gateway.handler.oidc.service.jwe.JWEService;
 import io.gravitee.am.model.oidc.Client;
 import io.gravitee.am.model.Domain;
 import io.gravitee.common.http.HttpStatusCode;
@@ -49,14 +53,15 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.runners.MockitoJUnitRunner;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.junit.MockitoJUnitRunner;
+import org.mockito.stubbing.Answer;
 
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.when;
 
 /**
@@ -80,8 +85,14 @@ public class AuthorizationEndpointTest extends RxWebTestBase {
     @Mock
     private OpenIDDiscoveryService openIDDiscoveryService;
 
+    @Mock
+    private JWTService jwtService;
+
+    @Mock
+    private JWEService jweService;
+
     @InjectMocks
-    private AuthorizationEndpoint authorizationEndpointHandler = new AuthorizationEndpoint(flow, domain);
+    private AuthorizationEndpoint authorizationEndpointHandler = new AuthorizationEndpoint(flow, domain, openIDDiscoveryService, jwtService, jweService);
 
     @Override
     public void setUp() throws Exception {
@@ -96,6 +107,14 @@ public class AuthorizationEndpointTest extends RxWebTestBase {
                 io.gravitee.am.common.oidc.ResponseType.CODE_ID_TOKEN_TOKEN,
                 io.gravitee.am.common.oidc.ResponseType.ID_TOKEN_TOKEN,
                 io.gravitee.am.common.oidc.ResponseType.ID_TOKEN));
+
+        openIDProviderMetadata.setResponseModesSupported(Arrays.asList(
+                io.gravitee.am.common.oauth2.ResponseMode.QUERY,
+                io.gravitee.am.common.oauth2.ResponseMode.FRAGMENT,
+                ResponseMode.QUERY_JWT,
+                ResponseMode.FRAGMENT_JWT,
+                ResponseMode.JWT));
+
         when(openIDDiscoveryService.getConfiguration(anyString())).thenReturn(openIDProviderMetadata);
 
         // set domain
@@ -111,7 +130,7 @@ public class AuthorizationEndpointTest extends RxWebTestBase {
                 .handler(new AuthorizationRequestParseParametersHandler(domain))
                 .handler(authorizationEndpointHandler);
         router.route()
-                .failureHandler(new AuthorizationFailureEndpoint(domain));
+                .failureHandler(new AuthorizationFailureEndpoint(domain,openIDDiscoveryService, jwtService, jweService));
     }
 
     @Test
@@ -1067,6 +1086,135 @@ public class AuthorizationEndpointTest extends RxWebTestBase {
                     String location = resp.headers().get("location");
                     assertNotNull(location);
                     assertEquals("http://localhost:9999/callback#" + expectedCallback, location);
+                },
+                HttpStatusCode.FOUND_302, "Found", null);
+    }
+
+    @Test
+    public void shouldInvokeAuthorizationEndpoint_responseModeQueryJWT() throws Exception {
+        io.gravitee.am.model.User user = new io.gravitee.am.model.User();
+
+        final Client client = new Client();
+        client.setId("client-id");
+        client.setClientId("client-id");
+        client.setRedirectUris(Collections.singletonList("http://localhost:9999/callback"));
+
+        AuthorizationRequest authorizationRequest = new AuthorizationRequest();
+        authorizationRequest.setApproved(true);
+        authorizationRequest.setResponseType(ResponseType.CODE);
+        authorizationRequest.setResponseMode(ResponseMode.QUERY_JWT);
+        authorizationRequest.setRedirectUri("http://localhost:9999/callback");
+
+        AuthorizationResponse authorizationResponse = new AuthorizationCodeResponse();
+        authorizationResponse.setRedirectUri(authorizationRequest.getRedirectUri());
+        ((AuthorizationCodeResponse) authorizationResponse).setCode("test-code");
+
+        router.route().order(-1).handler(routingContext -> {
+            routingContext.setUser(new User(new io.gravitee.am.gateway.handler.common.vertx.web.auth.user.User(user)));
+            routingContext.next();
+        });
+
+        when(jwtService.encodeAuthorization(any(JWT.class), eq(client))).thenReturn(Single.just("my-jwt"));
+        when(jweService.encryptAuthorization(anyString(), eq(client))).then(new Answer<Single<String>>() {
+            @Override
+            public Single<String> answer(InvocationOnMock invocation) throws Throwable {
+                return Single.just((String) invocation.getArguments()[0]);
+            }
+        });
+
+        when(clientSyncService.findByClientId("client-id")).thenReturn(Maybe.just(client));
+        when(flow.run(any(), any(), any())).thenReturn(Single.just(authorizationResponse));
+
+        testRequest(
+                HttpMethod.GET,
+                "/oauth/authorize?response_mode=query.jwt&response_type=code&client_id=client-id&redirect_uri=http://localhost:9999/callback",
+                null,
+                resp -> {
+                    String location = resp.headers().get("location");
+                    assertNotNull(location);
+                    assertEquals("http://localhost:9999/callback?response=my-jwt", location);
+                },
+                HttpStatusCode.FOUND_302, "Found", null);
+    }
+
+    @Test
+    public void shouldInvokeAuthorizationEndpoint_responseModeFragmentJWT() throws Exception {
+        io.gravitee.am.model.User user = new io.gravitee.am.model.User();
+
+        final Client client = new Client();
+        client.setId("client-id");
+        client.setClientId("client-id");
+        client.setRedirectUris(Collections.singletonList("http://localhost:9999/callback"));
+
+        AuthorizationRequest authorizationRequest = new AuthorizationRequest();
+        authorizationRequest.setApproved(true);
+        authorizationRequest.setResponseType(ResponseType.CODE);
+        authorizationRequest.setResponseMode(ResponseMode.FRAGMENT_JWT);
+        authorizationRequest.setRedirectUri("http://localhost:9999/callback");
+
+        AuthorizationResponse authorizationResponse = new AuthorizationCodeResponse();
+        authorizationResponse.setRedirectUri(authorizationRequest.getRedirectUri());
+        ((AuthorizationCodeResponse) authorizationResponse).setCode("test-code");
+
+        router.route().order(-1).handler(routingContext -> {
+            routingContext.setUser(new User(new io.gravitee.am.gateway.handler.common.vertx.web.auth.user.User(user)));
+            routingContext.next();
+        });
+
+        when(jwtService.encodeAuthorization(any(JWT.class), eq(client))).thenReturn(Single.just("my-jwt"));
+        when(jweService.encryptAuthorization(anyString(), eq(client))).then(new Answer<Single<String>>() {
+            @Override
+            public Single<String> answer(InvocationOnMock invocation) throws Throwable {
+                return Single.just((String) invocation.getArguments()[0]);
+            }
+        });
+
+        when(clientSyncService.findByClientId("client-id")).thenReturn(Maybe.just(client));
+        when(flow.run(any(), any(), any())).thenReturn(Single.just(authorizationResponse));
+
+        testRequest(
+                HttpMethod.GET,
+                "/oauth/authorize?response_mode=fragment.jwt&response_type=code&client_id=client-id&redirect_uri=http://localhost:9999/callback",
+                null,
+                resp -> {
+                    String location = resp.headers().get("location");
+                    assertNotNull(location);
+                    assertEquals("http://localhost:9999/callback#response=my-jwt", location);
+                },
+                HttpStatusCode.FOUND_302, "Found", null);
+    }
+
+    @Test
+    public void shouldNotInvokeAuthorizationEndpoint_mismatchRedirectUri_responseModeQueryJWT() throws Exception {
+        final Client client = new Client();
+        client.setId("client-id");
+        client.setClientId("client-id");
+        client.setScopes(Collections.singletonList("read"));
+        client.setRedirectUris(Collections.singletonList("http://localhost:9999/authorize/callback"));
+
+        AuthorizationRequest authorizationRequest = new AuthorizationRequest();
+        authorizationRequest.setApproved(true);
+        authorizationRequest.setResponseType(ResponseType.CODE);
+        authorizationRequest.setRedirectUri("http://localhost:9999/wrong/callback");
+
+        when(jwtService.encodeAuthorization(any(JWT.class), eq(client))).thenReturn(Single.just("my-jwt"));
+        when(jweService.encryptAuthorization(anyString(), eq(client))).then(new Answer<Single<String>>() {
+            @Override
+            public Single<String> answer(InvocationOnMock invocation) throws Throwable {
+                return Single.just((String) invocation.getArguments()[0]);
+            }
+        });
+
+        when(clientSyncService.findByClientId("client-id")).thenReturn(Maybe.just(client));
+
+        testRequest(
+                HttpMethod.GET,
+                "/oauth/authorize?response_mode=query.jwt&response_type=code&client_id=client-id&redirect_uri=http://localhost:9999/wrong/callback",
+                null,
+                resp -> {
+                    String location = resp.headers().get("location");
+                    assertNotNull(location);
+                    assertTrue(location.contains("/test/oauth/error?response="));
                 },
                 HttpStatusCode.FOUND_302, "Found", null);
     }

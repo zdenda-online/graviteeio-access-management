@@ -290,6 +290,9 @@ public class MongoApplicationRepository extends AbstractManagementMongoRepositor
         applicationOAuthSettingsMongo.setRefreshTokenValiditySeconds(other.getRefreshTokenValiditySeconds());
         applicationOAuthSettingsMongo.setIdTokenValiditySeconds(other.getIdTokenValiditySeconds());
         applicationOAuthSettingsMongo.setTokenCustomClaims(getMongoTokenClaims(other.getTokenCustomClaims()));
+        applicationOAuthSettingsMongo.setAuthorizationSignedResponseAlg(other.getAuthorizationSignedResponseAlg());
+        applicationOAuthSettingsMongo.setAuthorizationEncryptedResponseAlg(other.getAuthorizationEncryptedResponseAlg());
+        applicationOAuthSettingsMongo.setAuthorizationEncryptedResponseEnc(other.getAuthorizationEncryptedResponseEnc());
 
         return applicationOAuthSettingsMongo;
     }
@@ -346,6 +349,9 @@ public class MongoApplicationRepository extends AbstractManagementMongoRepositor
         applicationOAuthSettings.setRefreshTokenValiditySeconds(other.getRefreshTokenValiditySeconds());
         applicationOAuthSettings.setIdTokenValiditySeconds(other.getIdTokenValiditySeconds());
         applicationOAuthSettings.setTokenCustomClaims(getTokenClaims(other.getTokenCustomClaims()));
+        applicationOAuthSettings.setAuthorizationSignedResponseAlg(other.getAuthorizationSignedResponseAlg());
+        applicationOAuthSettings.setAuthorizationEncryptedResponseAlg(other.getAuthorizationEncryptedResponseAlg());
+        applicationOAuthSettings.setAuthorizationEncryptedResponseEnc(other.getAuthorizationEncryptedResponseEnc());
 
         return applicationOAuthSettings;
     }

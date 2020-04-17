@@ -57,6 +57,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import java.util.function.Predicate;
 
 /**
+ * @author David BRASSELY (david.brassely at graviteesource.com)
  * @author Alexandre FARIA (contact at alexandrefaria.net)
  * @author GraviteeSource Team
  */
@@ -70,7 +71,7 @@ public class JWEServiceImpl implements JWEService {
     @Override
     public Single<String> encryptIdToken(String signedJwt, Client client) {
         //Return input without encryption if client does not require JWE or algorithm is set to none
-        if(client.getIdTokenEncryptedResponseAlg()==null || JWEAlgorithm.NONE.equals(client.getIdTokenEncryptedResponseAlg())) {
+        if(client.getIdTokenEncryptedResponseAlg()==null || JWEAlgorithm.NONE.getName().equals(client.getIdTokenEncryptedResponseAlg())) {
             return Single.just(signedJwt);
         }
 
@@ -95,7 +96,7 @@ public class JWEServiceImpl implements JWEService {
     @Override
     public Single<String> encryptUserinfo(String signedJwt, Client client) {
         //Return input without encryption if client does not require JWE or algorithm is set to none
-        if(client.getUserinfoEncryptedResponseAlg()==null || JWEAlgorithm.NONE.equals(client.getUserinfoEncryptedResponseAlg())) {
+        if(client.getUserinfoEncryptedResponseAlg()==null || JWEAlgorithm.NONE.getName().equals(client.getUserinfoEncryptedResponseAlg())) {
             return Single.just(signedJwt);
         }
 
@@ -114,6 +115,31 @@ public class JWEServiceImpl implements JWEService {
                     }
                     LOGGER.error(throwable.getMessage(), throwable);
                     return Single.error(new ServerErrorException("Unable to encrypt userinfo"));
+                });
+    }
+
+    @Override
+    public Single<String> encryptAuthorization(String signedJwt, Client client) {
+        //Return input without encryption if client does not require JWE or algorithm is set to none
+        if (client.getAuthorizationEncryptedResponseAlg() == null || JWEAlgorithm.NONE.getName().equals(client.getAuthorizationEncryptedResponseAlg())) {
+            return Single.just(signedJwt);
+        }
+
+        JWEObject jwe = new JWEObject(
+                new JWEHeader.Builder(
+                        JWEAlgorithm.parse(client.getAuthorizationEncryptedResponseAlg()),
+                        EncryptionMethod.parse(client.getAuthorizationEncryptedResponseEnc()!=null?client.getAuthorizationEncryptedResponseEnc(): JWAlgorithmUtils.getDefaultAuthorizationResponseEnc())
+                ).contentType("JWT").build(),
+                new Payload(signedJwt)
+        );
+
+        return encrypt(jwe,client)
+                .onErrorResumeNext(throwable -> {
+                    if(throwable instanceof OAuth2Exception) {
+                        return Single.error(throwable);
+                    }
+                    LOGGER.error(throwable.getMessage(), throwable);
+                    return Single.error(new ServerErrorException("Unable to encrypt authorization"));
                 });
     }
 

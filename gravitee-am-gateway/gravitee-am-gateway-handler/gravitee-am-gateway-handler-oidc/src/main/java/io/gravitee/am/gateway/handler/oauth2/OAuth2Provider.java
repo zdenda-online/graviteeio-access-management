@@ -18,6 +18,7 @@ package io.gravitee.am.gateway.handler.oauth2;
 import io.gravitee.am.common.policy.ExtensionPoint;
 import io.gravitee.am.gateway.handler.api.ProtocolProvider;
 import io.gravitee.am.gateway.handler.common.client.ClientSyncService;
+import io.gravitee.am.gateway.handler.common.jwt.JWTService;
 import io.gravitee.am.gateway.handler.common.vertx.web.endpoint.ErrorEndpoint;
 import io.gravitee.am.gateway.handler.common.vertx.web.handler.AuthenticationFlowHandler;
 import io.gravitee.am.gateway.handler.common.vertx.web.handler.PolicyChainHandler;
@@ -47,6 +48,7 @@ import io.gravitee.am.gateway.handler.oauth2.service.scope.ScopeService;
 import io.gravitee.am.gateway.handler.oauth2.service.token.TokenManager;
 import io.gravitee.am.gateway.handler.oidc.service.discovery.OpenIDDiscoveryService;
 import io.gravitee.am.gateway.handler.oidc.service.flow.Flow;
+import io.gravitee.am.gateway.handler.oidc.service.jwe.JWEService;
 import io.gravitee.am.model.Domain;
 import io.gravitee.common.http.MediaType;
 import io.gravitee.common.service.AbstractService;
@@ -132,6 +134,12 @@ public class OAuth2Provider extends AbstractService<ProtocolProvider> implements
     @Autowired
     private AuthenticationFlowHandler authenticationFlowHandler;
 
+    @Autowired
+    private JWTService jwtService;
+
+    @Autowired
+    private JWEService jweService;
+
     @Override
     protected void doStart() throws Exception {
         super.doStart();
@@ -163,8 +171,8 @@ public class OAuth2Provider extends AbstractService<ProtocolProvider> implements
         Handler<RoutingContext> authorizationRequestParseRequiredParametersHandler = new AuthorizationRequestParseRequiredParametersHandler(openIDDiscoveryService);
         Handler<RoutingContext> authorizationRequestParseClientHandler = new AuthorizationRequestParseClientHandler(domain, clientSyncService);
         Handler<RoutingContext> authorizationRequestParseParametersHandler = new AuthorizationRequestParseParametersHandler(domain);
-        Handler<RoutingContext> authorizeEndpoint = new AuthorizationEndpoint(flow, domain);
-        Handler<RoutingContext> authorizeFailureEndpoint = new AuthorizationFailureEndpoint(domain);
+        Handler<RoutingContext> authorizeEndpoint = new AuthorizationEndpoint(flow, domain, openIDDiscoveryService, jwtService, jweService);
+        Handler<RoutingContext> authorizeFailureEndpoint = new AuthorizationFailureEndpoint(domain, openIDDiscoveryService, jwtService, jweService);
         Handler<RoutingContext> userApprovalRequestParseHandler = new UserApprovalRequestParseHandler(clientSyncService);
         Handler<RoutingContext> userApprovalProcessHandler = new UserApprovalProcessHandler(approvalService, domain);
         Handler<RoutingContext> userApprovalEndpoint = new UserApprovalEndpoint(scopeService, thymeleafTemplateEngine);

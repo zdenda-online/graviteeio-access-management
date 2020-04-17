@@ -15,16 +15,22 @@
  */
 package io.gravitee.am.gateway.handler.oauth2.resources.endpoint.authorization;
 
+import io.gravitee.am.common.exception.oauth2.OAuth2Exception;
 import io.gravitee.am.common.oidc.Parameters;
+import io.gravitee.am.gateway.handler.common.jwt.JWTService;
 import io.gravitee.am.gateway.handler.common.vertx.utils.UriBuilderRequest;
 import io.gravitee.am.gateway.handler.oauth2.exception.AccessDeniedException;
 import io.gravitee.am.gateway.handler.oauth2.exception.InteractionRequiredException;
+import io.gravitee.am.gateway.handler.oauth2.exception.JWTOAuth2Exception;
 import io.gravitee.am.gateway.handler.oauth2.exception.ServerErrorException;
 import io.gravitee.am.gateway.handler.oauth2.service.request.AuthorizationRequest;
+import io.gravitee.am.gateway.handler.oauth2.service.response.jwt.JWTAuthorizationResponse;
 import io.gravitee.am.gateway.handler.oauth2.service.utils.OAuth2Constants;
+import io.gravitee.am.gateway.handler.oidc.service.discovery.OpenIDDiscoveryService;
 import io.gravitee.am.gateway.handler.oidc.service.flow.Flow;
-import io.gravitee.am.model.oidc.Client;
+import io.gravitee.am.gateway.handler.oidc.service.jwe.JWEService;
 import io.gravitee.am.model.Domain;
+import io.gravitee.am.model.oidc.Client;
 import io.gravitee.common.http.HttpHeaders;
 import io.vertx.core.Handler;
 import io.vertx.reactivex.core.http.HttpServerResponse;
@@ -33,6 +39,7 @@ import io.vertx.reactivex.ext.web.RoutingContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Instant;
 import java.util.Arrays;
 
 /**
@@ -52,9 +59,17 @@ public class AuthorizationEndpoint extends AbstractAuthorizationEndpoint impleme
     private Flow flow;
     private Domain domain;
 
-    public AuthorizationEndpoint(Flow flow, Domain domain) {
+    private JWTService jwtService;
+    private JWEService jweService;
+    private OpenIDDiscoveryService openIDDiscoveryService;
+
+    public AuthorizationEndpoint(final Flow flow, final Domain domain, final OpenIDDiscoveryService openIDDiscoveryService,
+                                 final JWTService jwtService, final JWEService jweService) {
         this.domain = domain;
         this.flow = flow;
+        this.openIDDiscoveryService = openIDDiscoveryService;
+        this.jwtService = jwtService;
+        this.jweService = jweService;
     }
 
     @Override
@@ -79,10 +94,30 @@ public class AuthorizationEndpoint extends AbstractAuthorizationEndpoint impleme
                     try {
                         // final step of the authorization flow, we can clean the session and redirect the user
                         cleanSession(context);
-                        doRedirect(context.response(), authorizationResponse.buildRedirectUri());
+
+                        // Response Mode is not supplied by the client, process the response as usual
+                        if (request.getResponseMode() == null || !request.getResponseMode().endsWith("jwt")) {
+                            doRedirect(context.response(), authorizationResponse.buildRedirectUri());
+                        } else {
+                            JWTAuthorizationResponse jwtAuthorizationResponse = JWTAuthorizationResponse.from(authorizationResponse);
+                            jwtAuthorizationResponse.setIss(openIDDiscoveryService.getIssuer(UriBuilderRequest.extractBasePath(context)));
+                            jwtAuthorizationResponse.setAud(client.getClientId());
+
+                            // There is nothing about expiration. We admit to use the one settled for IdToken validity
+                            jwtAuthorizationResponse.setExp(Instant.now().plusSeconds(client.getIdTokenValiditySeconds()).getEpochSecond());
+
+                            //Sign if needed, else return unsigned JWT
+                            jwtService.encodeAuthorization(jwtAuthorizationResponse.build(), client)
+                                    //Encrypt if needed, else return JWT
+                                    .flatMap(userinfo -> jweService.encryptAuthorization(userinfo, client))
+                                    .subscribe(jwt -> doRedirect(context.response(),
+                                            jwtAuthorizationResponse.buildRedirectUri(
+                                                    request.getResponseType(), request.getResponseMode(), jwt)),
+                                            throwable -> sendException(context, request, throwable, client));
+                        }
                     } catch (Exception e) {
                         logger.error("Unable to redirect to client redirect_uri", e);
-                        context.fail(new ServerErrorException());
+                        sendException(context, request, new ServerErrorException(), client);
                     }
                 }, error -> {
                     if (error instanceof AccessDeniedException) {
@@ -92,7 +127,7 @@ public class AuthorizationEndpoint extends AbstractAuthorizationEndpoint impleme
                         // else redirect to consent user approval page
                         String prompt = request.parameters().getFirst(Parameters.PROMPT);
                         if (prompt != null && Arrays.asList(prompt.split("\\s+")).contains("none")) {
-                            context.fail(new InteractionRequiredException("Interaction required"));
+                            sendException(context, request, new InteractionRequiredException("Interaction required"), client);
                         } else {
                             // TODO should we put this data inside repository to handle cluster environment ?
                             context.session().put(OAuth2Constants.AUTHORIZATION_REQUEST, request);
@@ -100,10 +135,27 @@ public class AuthorizationEndpoint extends AbstractAuthorizationEndpoint impleme
                             doRedirect(context.response(), approvalPage);
                         }
                     } else {
-                        context.fail(error);
+                        sendException(context, request, error, client);
                     }
                 });
+    }
 
+    private void sendException(RoutingContext context, AuthorizationRequest request, Throwable throwable, Client client) {
+        // Response Mode is not supplied by the client, process the response as usual
+        if (request.getResponseMode() == null || !request.getResponseMode().endsWith(".jwt") || !(throwable instanceof OAuth2Exception)) {
+            context.fail(throwable);
+        } else {
+            JWTOAuth2Exception jwtException = new JWTOAuth2Exception((OAuth2Exception) throwable, request.getState());
+
+            //Sign if needed, else return unsigned JWT
+            jwtService.encodeAuthorization(jwtException.build(), client)
+                    //Encrypt if needed, else return JWT
+                    .flatMap(authorization -> jweService.encryptAuthorization(authorization, client))
+                    .subscribe(jwt -> doRedirect(context.response(),
+                            jwtException.buildRedirectUri(request.getRedirectUri(),
+                                    request.getResponseType(), request.getResponseMode(), jwt)),
+                            throwable2 -> sendException(context, request, throwable, client));
+        }
     }
 
     private void doRedirect(HttpServerResponse response, String url) {
